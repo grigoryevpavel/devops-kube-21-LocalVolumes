@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hostpathtest
+  labels:
+    tier: node
+    app: hostpathtest
+spec:
+  selector:
+    matchLabels:
+      tier: node
+      app: hostpathtest
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: hostpathtest
+    spec: 
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: multitool
+        image: wbitt/network-multitool
+        imagePullPolicy: IfNotPresent 
+        command: [ "sh", "-c"]
+        #  читаем последние 3 ошибки и пишем их в файл error.html в папке сервера nginx по умолчанию(/usr/share/nginx/html)
+        args:   
+        - nginx;
+          while true; do
+            temp_file=$(mktemp);
+            cat /syslog | grep -w -n  error | tail -3> "${temp_file}";
+            errors=$(cat "${temp_file}");
+            rm -f "${temp_file}";
+            echo "<html><title>Последние 3 ошибки</title><body style='padding:10px'><h2>Последние 3 ошибки:</h2><div>$errors</div></body></html>" > /usr/share/nginx/html/errors.html;
+            sleep 300;
+          done;
+        env:
+        - name: HTTP_PORT
+          value: "80"
+        - name: HTTPS_PORT
+          value: "443"
+        ports:
+        - containerPort: 80
+          protocol: TCP
+          name: http
+        - containerPort: 443
+          protocol: TCP
+          name: https 
+        volumeMounts:
+          - name: vol
+            mountPath: /syslog
+            readOnly: true 
+        resources:
+          requests:
+            cpu: "1m"
+            memory: "20Mi"
+          limits:
+            cpu: "10m"
+            memory: "20Mi"
+      volumes:
+        - name: vol
+          hostPath: 
+            path: /var/log/syslog
+            type: File
